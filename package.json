@@ -1,0 +1,11 @@
+{
+  "name": "quoter-chrome",
+  "version": "0.0.0",
+  "main": "dist/quoter-chrome.js",
+  "dependencies": {
+    "grunt":"*",
+    "grunt-coffee-browser-project":"*",
+    "grunt-contrib-watch":"*",
+    "quoter": "git+ssh://git@github.com:benastan/quoter.git"
+  }
+}
