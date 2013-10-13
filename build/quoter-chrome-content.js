@@ -127,20 +127,18 @@
 
 },{"../../selection":8}],7:[function(require,module,exports){
 (function() {
-  var Node;
-
-  Node = (function() {
+  if (typeof Node !== 'undefined') {
     Node.findSharedAncestor = function(firstNode, secondNode) {
       var ancestor, firstParentNode, secondParentNode;
       if (firstNode === secondNode) {
         return firstNode;
-      } else if (secondNode.node.contains(firstNode) && firstNode.node.parentNode === secondNode) {
+      } else if (secondNode.contains(firstNode) || firstNode.parentNode === secondNode) {
         return secondNode;
-      } else if (firstNode.node.contains(secondNode) && secondNode.node.parentNode === firstNode) {
+      } else if (firstNode.contains(secondNode) || secondNode.parentNode === firstNode) {
         return firstNode;
       } else {
-        firstParentNode = firstNode.node;
-        secondParentNode = secondNode.node;
+        firstParentNode = firstNode;
+        secondParentNode = secondNode;
         ancestor = false;
         while (firstParentNode = firstParentNode.parentNode) {
           while (secondParentNode = secondParentNode.parentNode) {
@@ -153,59 +151,53 @@
             ancestor = firstParentNode;
             break;
           }
-          secondParentNode = secondNode.node;
+          secondParentNode = secondNode;
         }
-        return new Node(ancestor);
+        return ancestor;
       }
     };
-
-    function Node(node) {
-      this.node = node;
-    }
-
     Node.prototype.collectTextNodes = function() {
       var child, textNodes, _i, _len, _ref;
       textNodes = [];
-      _ref = this.node.childNodes;
+      _ref = this.childNodes;
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         child = _ref[_i];
         if (child.nodeType === child.TEXT_NODE) {
           textNodes.push(child);
         } else {
-          textNodes = textNodes.concat(new Node(child).collectTextNodes());
+          textNodes = textNodes.concat(child.collectTextNodes());
         }
       }
       return textNodes;
     };
-
-    return Node;
-
-  })();
-
-  module.exports = Node;
+  }
 
 }).call(this);
 
 },{}],8:[function(require,module,exports){
 (function() {
-  var Node, Selection;
+  var Selection;
 
-  Node = require('./node');
+  require('./node');
 
   Selection = (function() {
     function Selection() {
-      var anchorNode, extentNode, _ref;
-      this.selection = document.getSelection();
-      _ref = this.selection, anchorNode = _ref.anchorNode, this.anchorOffset = _ref.anchorOffset, this.baseNode = _ref.baseNode, this.baseOffset = _ref.baseOffset, extentNode = _ref.extentNode, this.extentOffset = _ref.extentOffset, this.focusNode = _ref.focusNode, this.focusOffset = _ref.focusOffset, this.isCollapsed = _ref.isCollapsed, this.rangeCount = _ref.rangeCount, this.type = _ref.type;
+      this.getSelection();
       this.string = this.selection.toString();
       this.length = this.string.length;
-      this.anchorNode = new Node(anchorNode);
-      this.extentNode = new Node(extentNode);
-      this.ancestorNode = Node.findSharedAncestor(this.anchorNode, this.extentNode);
-      this.textNodes = this.ancestorNode.collectTextNodes();
+      this.openTag = '<span style="background-color: green" class="quoter-selected-text">';
+      this.closeTag = '</span>';
+      this.ancestorNode = Node.findSharedAncestor(this.anchorNode, this.focusNode);
+      this.textNodes = (this.anchorNode === this.focusNode ? [this.anchorNode] : this.ancestorNode.collectTextNodes());
       this.filterTextNodes();
       this.wrapNodes();
     }
+
+    Selection.prototype.getSelection = function() {
+      var _ref;
+      this.selection = document.getSelection();
+      return _ref = this.selection, this.anchorNode = _ref.anchorNode, this.anchorOffset = _ref.anchorOffset, this.baseNode = _ref.baseNode, this.baseOffset = _ref.baseOffset, this.focusNode = _ref.focusNode, this.focusOffset = _ref.focusOffset, this.focusNode = _ref.focusNode, this.focusOffset = _ref.focusOffset, this.isCollapsed = _ref.isCollapsed, this.rangeCount = _ref.rangeCount, this.type = _ref.type, _ref;
+    };
 
     Selection.prototype.filterTextNodes = function() {
       var node, textNodes, _i, _len, _ref;
@@ -221,26 +213,47 @@
     };
 
     Selection.prototype.wrapNodes = function() {
-      var html, node, parent, _i, _len, _ref, _results;
+      var node, _i, _len, _ref, _results;
       if (this.textNodes.length === 1) {
-        this.wrapSingleNode();
+        return this.wrapSelectedTextWithinNode(this.anchorNode, this.anchorOffset, this.focusOffset);
       } else {
-        this.wrapFirstNode();
-        this.wrapLastNode();
-      }
-      _ref = this.textNodes;
-      _results = [];
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        node = _ref[_i];
-        parent = node.parentElement;
-        if (!(node.textContent.match(/^\s+$/) || !parent)) {
-          html = parent.innerHTML;
-          _results.push(parent.innerHTML = '<span style="background-color: green">' + html + '</span>');
-        } else {
-          _results.push(void 0);
+        this.wrapSelectedTextWithinNode(this.anchorNode, this.anchorOffset);
+        this.wrapSelectedTextWithinNode(this.focusNode, 0, this.focusOffset);
+        _ref = this.textNodes.slice(1, -1);
+        _results = [];
+        for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+          node = _ref[_i];
+          _results.push(this.wrapSelectedTextWithinNode(node));
         }
+        return _results;
       }
-      return _results;
+    };
+
+    Selection.prototype.wrapSelectedTextWithinNode = function(node, start, end) {
+      var chars, child, intermediateNode, parent;
+      if (start == null) {
+        start = 0;
+      }
+      if (end == null) {
+        end = false;
+      }
+      parent = node.parentElement;
+      if (!node.textContent.match(/^\s+$/) && parent) {
+        chars = node.textContent.split('');
+        chars.splice(start, 0, this.openTag);
+        if (end) {
+          chars.splice(end + 1, 0, this.closeTag);
+        } else {
+          chars.push(this.closeTag);
+        }
+        intermediateNode = document.createElement('span');
+        intermediateNode.innerHTML = chars.join('');
+        while (intermediateNode.childNodes.length) {
+          child = intermediateNode.childNodes[0];
+          parent.insertBefore(child, node);
+        }
+        return parent.removeChild(node);
+      }
     };
 
     return Selection;
